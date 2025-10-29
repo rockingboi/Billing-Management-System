@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import transactionService from "../services/transactionService";
+import { showNotification } from "./NotificationSystem";
 
-const TransactionForm = ({ onSave }) => {
+const TransactionForm = ({ onSave, transactionType = "factory" }) => {
   const [form, setForm] = useState({
     party_id: "",
     factory_id: "",
@@ -16,6 +17,7 @@ const TransactionForm = ({ onSave }) => {
     first: 0,
     second: 0,
     third: 0,
+    remarks: "",
   });
 
   const [parties, setParties] = useState([]);
@@ -74,11 +76,15 @@ const TransactionForm = ({ onSave }) => {
     const total_amount = computeAmount();
 
     try {
-      await transactionService.createTransaction({
+      const transactionData = {
         ...form,
         total_amount,
-      });
+        transactionType,
+      };
 
+      await transactionService.createTransaction(transactionData);
+
+      // Reset form
       setForm({
         party_id: "",
         factory_id: "",
@@ -92,145 +98,197 @@ const TransactionForm = ({ onSave }) => {
         first: 0,
         second: 0,
         third: 0,
+        remarks: "",
       });
 
+      showNotification('success', 'Transaction created successfully!');
       if (onSave) onSave();
     } catch (err) {
       console.error("Failed to save transaction", err);
-      alert("Error saving transaction.");
+      showNotification('error', 'Failed to save transaction. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white p-4 rounded shadow mb-6">
-      <h2 className="text-xl font-bold mb-4">Add Scrap Transaction</h2>
+    <div className="card">
+      <h2 className="text-lg font-semibold text-gray-900 mb-6">Add Scrap Transaction</h2>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Party Select */}
-        <div>
-          <label className="block font-semibold mb-1">Party</label>
-          <select
-            name="party_id"
-            value={form.party_id}
-            onChange={handleChange}
-            className="border rounded px-3 py-2 w-full"
-            required
-          >
-            <option value="">Select Party</option>
-            {parties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic Information */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Party Select - Required for party transactions, optional for factory */}
+          <div>
+            <label htmlFor="party_id" className="block text-sm font-medium text-gray-700 mb-1">
+              Party {transactionType === "party" && <span className="text-red-500">*</span>}
+            </label>
+            <select
+              id="party_id"
+              name="party_id"
+              value={form.party_id}
+              onChange={handleChange}
+              className="w-full"
+              required={transactionType === "party"}
+            >
+              <option value="">Select Party</option>
+              {parties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Factory Select - Required for factory transactions, optional for party */}
+          <div>
+            <label htmlFor="factory_id" className="block text-sm font-medium text-gray-700 mb-1">
+              Factory {transactionType === "factory" && <span className="text-red-500">*</span>}
+            </label>
+            <select
+              id="factory_id"
+              name="factory_id"
+              value={form.factory_id}
+              onChange={handleChange}
+              className="w-full"
+              required={transactionType === "factory"}
+            >
+              <option value="">Select Factory</option>
+              {factories.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Factory Select */}
-        <div>
-          <label className="block font-semibold mb-1">Factory</label>
-          <select
-            name="factory_id"
-            value={form.factory_id}
-            onChange={handleChange}
-            className="border rounded px-3 py-2 w-full"
-            required
-          >
-            <option value="">Select Factory</option>
-            {factories.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Vehicle and Date */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="vehicle_no" className="block text-sm font-medium text-gray-700 mb-1">
+              Vehicle Number *
+            </label>
+            <input
+              type="text"
+              id="vehicle_no"
+              name="vehicle_no"
+              value={form.vehicle_no}
+              onChange={handleChange}
+              className="w-full"
+              placeholder="e.g. UP32 AB 1234"
+              required
+            />
+          </div>
 
-        {/* Vehicle No */}
-        <div>
-          <label className="block font-semibold mb-1">Vehicle No</label>
-          <input
-            type="text"
-            name="vehicle_no"
-            value={form.vehicle_no}
-            onChange={handleChange}
-            className="border rounded px-3 py-2 w-full"
-            placeholder="e.g. UP32 AB 1234"
-            required
-          />
-        </div>
-
-        {/* Date */}
-        <div>
-          <label className="block font-semibold mb-1">Date</label>
-          <input
-            type="date"
-            name="date"
-            value={form.date}
-            onChange={handleChange}
-            className="border rounded px-3 py-2 w-full"
-            required
-          />
+          <div>
+            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+              Transaction Date *
+            </label>
+            <input
+              type="date"
+              id="date"
+              name="date"
+              value={form.date}
+              onChange={handleChange}
+              className="w-full"
+              required
+            />
+          </div>
         </div>
 
         {/* Weight & Rate */}
-        <div>
-          <label className="block font-semibold mb-1">Weight (kg)</label>
-          <input
-            type="number"
-            name="weight"
-            value={form.weight}
-            onChange={handleChange}
-            className="border rounded px-3 py-2 w-full"
-            step="0.01"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block font-semibold mb-1">Rate (₹/kg)</label>
-          <input
-            type="number"
-            name="rate"
-            value={form.rate}
-            onChange={handleChange}
-            className="border rounded px-3 py-2 w-full"
-            step="0.01"
-            required
-          />
-        </div>
-
-        {/* Deductions */}
-        {["moisture", "rejection", "duplex", "first", "second", "third"].map((field) => (
-          <div key={field}>
-            <label className="block font-semibold mb-1">
-              {field.charAt(0).toUpperCase() + field.slice(1)}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="weight" className="block text-sm font-medium text-gray-700 mb-1">
+              Weight (kg) *
             </label>
             <input
               type="number"
-              name={field}
-              value={form[field]}
+              id="weight"
+              name="weight"
+              value={form.weight}
               onChange={handleChange}
-              className="border rounded px-3 py-2 w-full"
+              className="w-full"
               step="0.01"
-              min="0"
+              placeholder="Enter weight in kg"
+              required
             />
           </div>
-        ))}
+
+          <div>
+            <label htmlFor="rate" className="block text-sm font-medium text-gray-700 mb-1">
+              Rate (₹/kg) *
+            </label>
+            <input
+              type="number"
+              id="rate"
+              name="rate"
+              value={form.rate}
+              onChange={handleChange}
+              className="w-full"
+              step="0.01"
+              placeholder="Enter rate per kg"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Deductions Section */}
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Deductions</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {["moisture", "rejection", "duplex", "first", "second", "third"].map((field) => (
+              <div key={field}>
+                <label htmlFor={field} className="block text-sm font-medium text-gray-700 mb-1">
+                  {field.charAt(0).toUpperCase() + field.slice(1)}
+                </label>
+                <input
+                  type="number"
+                  id={field}
+                  name={field}
+                  value={form[field]}
+                  onChange={handleChange}
+                  className="w-full"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Remarks */}
+        <div>
+          <label htmlFor="remarks" className="block text-sm font-medium text-gray-700 mb-1">
+            Remarks
+          </label>
+          <textarea
+            id="remarks"
+            name="remarks"
+            value={form.remarks}
+            onChange={handleChange}
+            className="w-full"
+            rows="3"
+            placeholder="Additional notes or remarks..."
+          />
+        </div>
 
         {/* Computed Amount */}
-        <div className="md:col-span-3 text-right">
-          <p className="text-lg font-bold">
-            Total Amount: ₹ {computeAmount()}
-          </p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-medium text-gray-900">Total Amount:</span>
+            <span className="text-2xl font-bold text-green-600">₹ {computeAmount()}</span>
+          </div>
         </div>
 
         {/* Submit */}
-        <div className="md:col-span-3 text-right">
+        <div className="flex justify-end pt-4">
           <button
             type="submit"
             disabled={loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            className="success"
           >
             {loading ? "Saving..." : "Save Transaction"}
           </button>

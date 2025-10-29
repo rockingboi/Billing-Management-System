@@ -9,7 +9,7 @@ export const getParties = () => {
 
 // Fetch all factories
 export const getFactories = () => {
-  return axios.get(`${API_URL}/factories`);
+  return axios.get(`${API_URL}http://localhost:3001//factories`);
 };
 
 // Get dashboard data for a party by ID, with optional filters

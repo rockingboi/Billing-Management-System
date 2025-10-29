@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { showNotification } from "./NotificationSystem";
 
 const MoneyTransactionForm = ({ type }) => {
   const [entities, setEntities] = useState([]);
@@ -69,9 +70,10 @@ const MoneyTransactionForm = ({ type }) => {
       await axios.post(`http://localhost:5001/api/payments/${isParty ? "party_payments" : "factory_payments"}`, payload);
       setSuccessMsg("Payment successfully recorded.");
       setForm({ id: "", name: "", date: "", amount: "" , remarks: ""});
+      showNotification('success', `${isParty ? 'Party' : 'Factory'} payment recorded successfully!`);
     } catch (error) {
       console.error("Failed to submit payment", error);
-      alert("Something went wrong");
+      showNotification('error', 'Failed to record payment. Please try again.');
     } finally {
       setLoading(false);
     }

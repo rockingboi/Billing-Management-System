@@ -1,5 +1,6 @@
 const PartyRepo = require('../repositories/PartyRepo');
 const PartyService = require('../services/PartyService');
+const GstinValidationService = require('../services/GstinValidationService');
 
 class PartyController {
   static async createParty(req, res) {
@@ -77,6 +78,30 @@ class PartyController {
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: 'Failed to fetch party summary' });
+    }
+  }
+
+  // GSTIN validation endpoint
+  static async validateGstin(req, res) {
+    try {
+      const { gstin } = req.body;
+      
+      if (!gstin) {
+        return res.status(400).json({ message: 'GSTIN is required' });
+      }
+
+      // Validate GSTIN format first
+      if (!GstinValidationService.validateGstinFormat(gstin)) {
+        return res.status(400).json({ 
+          message: 'Invalid GSTIN format. GSTIN should be 15 characters long and follow the correct format.' 
+        });
+      }
+
+      const validationResult = await GstinValidationService.validateGstin(gstin);
+      res.json(validationResult);
+    } catch (error) {
+      console.error('GSTIN validation error:', error);
+      res.status(500).json({ message: 'Failed to validate GSTIN' });
     }
   }
 }

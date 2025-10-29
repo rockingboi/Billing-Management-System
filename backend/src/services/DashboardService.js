@@ -1,11 +1,13 @@
 const TransactionRepo = require('../repositories/TransactionRepo');
+const db = require('../config/db.config'); // Assuming this is where your db connection is
+
 class DashboardService {
-  // Previous methods (can keep or remove as needed)
+
   static async getPartyDashboard(party_id) {
     const transactions = await TransactionRepo.getPartyTransactions(party_id);
     const payments = await TransactionRepo.getPartyPayments(party_id);
-    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
     const remaining = totalAmount - totalPaid;
     return { transactions, payments, totalAmount, totalPaid, remaining };
   }
@@ -13,35 +15,45 @@ class DashboardService {
   static async getFactoryDashboard(factory_id) {
     const transactions = await TransactionRepo.getFactoryTransactions(factory_id);
     const payments = await TransactionRepo.getFactoryPayments(factory_id);
-    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
-    const totalReceived = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+    const totalReceived = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
     const remaining = totalAmount - totalReceived;
     return { transactions, payments, totalAmount, totalReceived, remaining };
   }
 
-  // ✅ New: With optional from/to date
   static async getPartySummary(partyId, startDate, endDate) {
     const transactions = await TransactionRepo.getPartyTransactions({ partyId, startDate, endDate });
     const payments = await TransactionRepo.getPartyPayments({ partyId, startDate, endDate });
-  
-    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.total_amount), 0);
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+
+    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
     const remaining = totalAmount - totalPaid;
-  
+
     return { totalAmount, totalPaid, remaining, transactions, payments };
+  }
+
+  static async getFactorySummary(factoryId, startDate, endDate) {
+    const transactions = await TransactionRepo.getFactoryTransactions({ factoryId, startDate, endDate });
+    const payments = await TransactionRepo.getFactoryPayments({ factoryId, startDate, endDate });
+
+    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+    const totalReceived = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
+    const remaining = totalAmount - totalReceived;
+
+    return { totalAmount, totalReceived, remaining, transactions, payments };
   }
 
   static addSerialAndClean(dataArray, idField) {
     if (!dataArray) return [];
     return dataArray.map((item, index) => {
       const newItem = { ...item, serial: index + 1 };
-      delete newItem[idField];
+      // Do NOT delete total_amount or important fields
+      delete newItem[idField]; // Only remove party_id or factory_id for privacy
       return newItem;
     });
   }
 
   static async getFilteredHisab(partyId, factoryId, startDate, endDate) {
-    // Prepare query parts for date filter
     const dateFilter = (alias) => {
       if (startDate && endDate) {
         return `AND ${alias}.date BETWEEN ? AND ?`;
@@ -53,12 +65,10 @@ class DashboardService {
       return '';
     };
 
-    // Prepare date params for queries
     const dateParams = [];
     if (startDate) dateParams.push(startDate);
     if (endDate) dateParams.push(endDate);
 
-    // Result object to collect
     let result = {
       party_transactions: [],
       party_payments: [],
@@ -67,17 +77,15 @@ class DashboardService {
     };
 
     if (partyId && !factoryId) {
-      // 1. Only Party selected: get all party_transactions + party_payments for that party with date filter
-      // party_transactions
       const partyTxSql = `
-        SELECT id, party_id, date, vehicle_no, weight, rate, moisture, rejection, duplex, first, second, third, total_amount, remarks, factory_name, party_name
+        SELECT id, party_id, date, vehicle_no, weight, rate, moisture, rejection, duplex, first, second, third,
+               total_amount, remarks, factory_name, party_name, type
         FROM party_transactions
         WHERE party_id = ?
         ${dateFilter('party_transactions')}
         ORDER BY date DESC, id DESC
       `;
 
-      // party_payments
       const partyPaySql = `
         SELECT id, party_id, date, amount_paid, remarks, party_name, total_amount, remaining_amount
         FROM party_payments
@@ -86,20 +94,11 @@ class DashboardService {
         ORDER BY date DESC, id DESC
       `;
 
-      // Build params for transactions and payments separately
       let partyTxParams = [partyId];
       let partyPayParams = [partyId];
 
-      if (startDate && endDate) {
-        partyTxParams.push(startDate, endDate);
-        partyPayParams.push(startDate, endDate);
-      } else if (startDate) {
-        partyTxParams.push(startDate);
-        partyPayParams.push(startDate);
-      } else if (endDate) {
-        partyTxParams.push(endDate);
-        partyPayParams.push(endDate);
-      }
+      partyTxParams.push(...dateParams);
+      partyPayParams.push(...dateParams);
 
       const [partyTxRows] = await db.execute(partyTxSql, partyTxParams);
       const [partyPayRows] = await db.execute(partyPaySql, partyPayParams);
@@ -107,13 +106,7 @@ class DashboardService {
       result.party_transactions = this.addSerialAndClean(partyTxRows, 'party_id');
       result.party_payments = this.addSerialAndClean(partyPayRows, 'party_id');
 
-      // factory side stays empty
-      result.factory_transactions = [];
-      result.factory_payments = [];
-
     } else if (!partyId && factoryId) {
-      // 2. Only Factory selected: get all factory_transactions + factory_payments for that factory with date filter
-
       const factoryTxSql = `
         SELECT id, factory_id, date, vehicle_no, weight, rate, total_amount, remarks, factory_name, party_name
         FROM factory_transactions
@@ -123,7 +116,7 @@ class DashboardService {
       `;
 
       const factoryPaySql = `
-        SELECT id, factory_id, date, amount_received, remarks, factory_name, total_amount, remaining_amount
+        SELECT id, factory_id, date, amount_received AS amount_paid, remarks, factory_name, total_amount, remaining_amount
         FROM factory_payments
         WHERE factory_id = ?
         ${dateFilter('factory_payments')}
@@ -133,16 +126,8 @@ class DashboardService {
       let factoryTxParams = [factoryId];
       let factoryPayParams = [factoryId];
 
-      if (startDate && endDate) {
-        factoryTxParams.push(startDate, endDate);
-        factoryPayParams.push(startDate, endDate);
-      } else if (startDate) {
-        factoryTxParams.push(startDate);
-        factoryPayParams.push(startDate);
-      } else if (endDate) {
-        factoryTxParams.push(endDate);
-        factoryPayParams.push(endDate);
-      }
+      factoryTxParams.push(...dateParams);
+      factoryPayParams.push(...dateParams);
 
       const [factoryTxRows] = await db.execute(factoryTxSql, factoryTxParams);
       const [factoryPayRows] = await db.execute(factoryPaySql, factoryPayParams);
@@ -150,19 +135,10 @@ class DashboardService {
       result.factory_transactions = this.addSerialAndClean(factoryTxRows, 'factory_id');
       result.factory_payments = this.addSerialAndClean(factoryPayRows, 'factory_id');
 
-      // party side empty
-      result.party_transactions = [];
-      result.party_payments = [];
-
     } else if (partyId && factoryId) {
-      // 3. Both party and factory selected:
-      // Get party_transactions and party_payments where party_name AND factory_name both match, and apply date filter
-      // Similarly for factory side (optional, but mostly symmetrical)
-
-      // Note: party_transactions contains factory_name and party_name columns, so filter on those
-
       const bothTxSql = `
-        SELECT id, party_id, date, vehicle_no, weight, rate, moisture, rejection, duplex, first, second, third, total_amount, remarks, factory_name, party_name
+        SELECT id, party_id, date, vehicle_no, weight, rate, moisture, rejection, duplex, first, second, third,
+               total_amount, remarks, factory_name, party_name, type
         FROM party_transactions
         WHERE party_name = (SELECT name FROM parties WHERE id = ?)
           AND factory_name = (SELECT name FROM factories WHERE id = ?)
@@ -184,7 +160,6 @@ class DashboardService {
         ORDER BY date DESC, id DESC
       `;
 
-      // Factory transactions filtered by party_name and factory_name
       const factoryTxSql = `
         SELECT id, factory_id, date, vehicle_no, weight, rate, total_amount, remarks, factory_name, party_name
         FROM factory_transactions
@@ -195,7 +170,7 @@ class DashboardService {
       `;
 
       const factoryPaySql = `
-        SELECT id, factory_id, date, amount_received, remarks, factory_name, total_amount, remaining_amount
+        SELECT id, factory_id, date, amount_received AS amount_paid, remarks, factory_name, total_amount, remaining_amount
         FROM factory_payments
         WHERE factory_name = (SELECT name FROM factories WHERE id = ?)
           AND factory_id = ?
@@ -208,31 +183,11 @@ class DashboardService {
         ORDER BY date DESC, id DESC
       `;
 
-      // Prepare parameters
-      let paramsTx = [partyId, factoryId];
-      let paramsPay = [partyId, partyId, factoryId];
-      let paramsFactoryTx = [partyId, factoryId];
-      let paramsFactoryPay = [factoryId, factoryId, partyId];
+      const paramsTx = [partyId, factoryId, ...dateParams];
+      const paramsPay = [partyId, partyId, factoryId, ...dateParams];
+      const paramsFactoryTx = [partyId, factoryId, ...dateParams];
+      const paramsFactoryPay = [factoryId, factoryId, partyId, ...dateParams];
 
-      // Add date params if needed
-      if (startDate && endDate) {
-        paramsTx.push(startDate, endDate);
-        paramsPay.push(startDate, endDate);
-        paramsFactoryTx.push(startDate, endDate);
-        paramsFactoryPay.push(startDate, endDate);
-      } else if (startDate) {
-        paramsTx.push(startDate);
-        paramsPay.push(startDate);
-        paramsFactoryTx.push(startDate);
-        paramsFactoryPay.push(startDate);
-      } else if (endDate) {
-        paramsTx.push(endDate);
-        paramsPay.push(endDate);
-        paramsFactoryTx.push(endDate);
-        paramsFactoryPay.push(endDate);
-      }
-
-      // Execute queries
       const [partyTxRows] = await db.execute(bothTxSql, paramsTx);
       const [partyPayRows] = await db.execute(bothPaySql, paramsPay);
       const [factoryTxRows] = await db.execute(factoryTxSql, paramsFactoryTx);
@@ -245,18 +200,6 @@ class DashboardService {
     }
 
     return result;
-  }
-  
-
-  static async getFactorySummary(factoryId, startDate, endDate) {
-    const transactions = await TransactionRepo.getFactoryTransactions({ factoryId, startDate, endDate });
-    const payments = await TransactionRepo.getFactoryPayments({ factoryId, startDate, endDate });
-  
-    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.total_amount), 0);
-    const totalReceived = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
-    const remaining = totalAmount - totalReceived;
-  
-    return { totalAmount, totalReceived, remaining, transactions, payments };
   }
 }
 

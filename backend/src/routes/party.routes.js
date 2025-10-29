@@ -13,4 +13,7 @@ router.get("/filter", PartyController.filterParties);
 // ✅ New summary route for dashboard
 router.get('/:id/summary', PartyController.getPartySummary);
 
+// GSTIN validation route
+router.post('/validate-gstin', PartyController.validateGstin);
+
 module.exports = router;

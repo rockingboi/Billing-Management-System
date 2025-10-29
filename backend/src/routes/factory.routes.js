@@ -14,4 +14,7 @@ router.get('/:id/summary', FactoryController.getFactorySummary);
 // New filter route
 router.get('/filter', FactoryController.filterFactories);
 
+// GSTIN validation route
+router.post('/validate-gstin', FactoryController.validateGstin);
+
 module.exports = router;

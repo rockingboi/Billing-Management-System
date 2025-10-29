@@ -1,5 +1,6 @@
 const FactoryRepo = require('../repositories/FactoryRepo');
 const FactoryService = require('../services/FactoryService');
+const GstinValidationService = require('../services/GstinValidationService');
 
 class FactoryController {
   static async createFactory(req, res) {
@@ -78,6 +79,30 @@ class FactoryController {
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: 'Failed to fetch factory summary' });
+    }
+  }
+
+  // GSTIN validation endpoint
+  static async validateGstin(req, res) {
+    try {
+      const { gstin } = req.body;
+      
+      if (!gstin) {
+        return res.status(400).json({ message: 'GSTIN is required' });
+      }
+
+      // Validate GSTIN format first
+      if (!GstinValidationService.validateGstinFormat(gstin)) {
+        return res.status(400).json({ 
+          message: 'Invalid GSTIN format. GSTIN should be 15 characters long and follow the correct format.' 
+        });
+      }
+
+      const validationResult = await GstinValidationService.validateGstin(gstin);
+      res.json(validationResult);
+    } catch (error) {
+      console.error('GSTIN validation error:', error);
+      res.status(500).json({ message: 'Failed to validate GSTIN' });
     }
   }
 }

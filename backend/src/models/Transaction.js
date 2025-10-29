@@ -30,7 +30,8 @@ class Transaction {
       this.second = second;
       this.third = third;
       this.amount = amount;
-      this.type = type; 
+      this.total_amount = amount;
+      // this.type = type; 
     }
   }
   

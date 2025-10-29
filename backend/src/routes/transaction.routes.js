@@ -12,6 +12,7 @@ router.get('/factory/:factory_id', TransactionController.getTransactionsByFactor
 
 router.get('/filter', FactoryController.filterFactories); // put before /:id
 router.get('/:id', FactoryController.getFactoryById);
+router.get('/hisab', TransactionController.getHisab);
 
 // Summaries
 router.get('/summary/party/:party_id', TransactionController.getSummaryParty);

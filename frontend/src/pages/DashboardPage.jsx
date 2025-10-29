@@ -1,12 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-import { formatCurrency } from '../utils/formatter';
-import TransactionTable from '../components/TransactionTable';
-import HisabTally from '../pages/HisabTally';
+import { Users, Factory, FileText, BarChart3, TrendingUp } from 'lucide-react';
+import HisabTally from './HisabTally';
 
 const DashboardPage = () => {
   const [partyId, setPartyId] = useState('');
@@ -17,27 +12,27 @@ const DashboardPage = () => {
   const [factoryData, setFactoryData] = useState(null);
 
   useEffect(() => {
-    const fetchCounts = async () => {
+    const fetchOptions = async () => {
       try {
         const [partiesRes, factoriesRes] = await Promise.all([
           axios.get('http://localhost:5001/api/parties'),
-          axios.get('http://localhost:5001/api/factories'),
+          axios.get('http://localhost:5001/api/factories')
         ]);
         setPartyOptions(partiesRes.data);
         setFactoryOptions(factoriesRes.data);
       } catch (err) {
-        console.error('Error fetching counts', err);
+        console.error('Error fetching options', err);
       }
     };
 
-    fetchCounts();
+    fetchOptions();
   }, []);
 
   useEffect(() => {
     const fetchPartyData = async () => {
       if (!partyId) return setPartyData(null);
       try {
-        const res = await axios.get(`http://localhost:5001/api/parties/${partyId}/summary`);
+        const res = await axios.get(`http://localhost:5001/api/transactions/summary/party/${partyId}`);
         setPartyData(res.data);
       } catch (err) {
         console.error('Error fetching party summary:', err);
@@ -50,7 +45,7 @@ const DashboardPage = () => {
     const fetchFactoryData = async () => {
       if (!factoryId) return setFactoryData(null);
       try {
-        const res = await axios.get(`http://localhost:5001/api/factories/${factoryId}/summary`);
+        const res = await axios.get(`http://localhost:5001/api/transactions/summary/factory/${factoryId}`);
         setFactoryData(res.data);
       } catch (err) {
         console.error('Error fetching factory summary:', err);
@@ -59,219 +54,136 @@ const DashboardPage = () => {
     fetchFactoryData();
   }, [factoryId]);
 
-  const exportSummaryAsPDF = (type) => {
-    const data = type === 'party' ? partyData : factoryData;
-    if (!data) return;
-
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.setTextColor('#059669');
-    doc.text(`${type === 'party' ? 'Party' : 'Factory'} Summary`, 14, 22);
-    doc.setFontSize(12);
-    doc.setTextColor('#374151');
-    doc.text(`Total Amount: ₹ ${data.totalAmount}`, 14, 32);
-    doc.text(
-      `${type === 'party' ? 'Total Paid' : 'Total Received'}: ₹ ${
-        type === 'party' ? data.totalPaid : data.totalReceived
-      }`,
-      14,
-      40
-    );
-    doc.text(`Remaining: ₹ ${data.remaining}`, 14, 48);
-
-    const columns =
-      type === 'party'
-        ? ['Date', 'Vehicle', 'Weight', 'Rate', 'Moisture', 'Rejection', 'Duplex', 'Total']
-        : ['Date', 'Vehicle', 'Weight', 'Rate', 'Total'];
-
-    const rows = data.transactions.map((tx) =>
-      type === 'party'
-        ? [
-            tx.date,
-            tx.vehicle_no || '',
-            tx.weight,
-            tx.rate,
-            tx.moisture || '-',
-            tx.rejection || '-',
-            tx.duplex || '-',
-            `₹ ${tx.total_amount}`,
-          ]
-        : [tx.date, tx.vehicle_no || '', tx.weight, tx.rate, `₹ ${tx.total_amount}`]
-    );
-
-    doc.autoTable({
-      startY: 60,
-      head: [columns],
-      body: rows,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: '#34D399' },
-    });
-
-    doc.save(`${type}_summary_${Date.now()}.pdf`);
-  };
-
-  const exportSummaryAsExcel = (type) => {
-    const data = type === 'party' ? partyData : factoryData;
-    if (!data) return;
-
-    const summarySheet = [
-      ['Total Amount', data.totalAmount],
-      [type === 'party' ? 'Total Paid' : 'Total Received', type === 'party' ? data.totalPaid : data.totalReceived],
-      ['Remaining', data.remaining],
-    ];
-
-    const transactionHeaders =
-      type === 'party'
-        ? ['Date', 'Vehicle No', 'Weight', 'Rate', 'Moisture', 'Rejection', 'Duplex', 'Total Amount']
-        : ['Date', 'Vehicle No', 'Weight', 'Rate', 'Total Amount'];
-
-    const transactionRows = data.transactions.map((tx) =>
-      type === 'party'
-        ? [tx.date, tx.vehicle_no, tx.weight, tx.rate, tx.moisture, tx.rejection, tx.duplex, tx.total_amount]
-        : [tx.date, tx.vehicle_no, tx.weight, tx.rate, tx.total_amount]
-    );
-
-    const wb = XLSX.utils.book_new();
-    const wsSummary = XLSX.utils.aoa_to_sheet(summarySheet);
-    const wsTransactions = XLSX.utils.aoa_to_sheet([transactionHeaders, ...transactionRows]);
-
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-    XLSX.utils.book_append_sheet(wb, wsTransactions, 'Transactions');
-
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `${type}_summary_${Date.now()}.xlsx`);
-  };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-10">
-      <h2 className="text-4xl font-extrabold text-gray-900">Dashboard</h2>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Dashboard</h1>
+        <p className="text-gray-600">
+          Overview of your business operations and financial transactions
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl shadow-md p-8 flex flex-col items-center">
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">Total Parties</h3>
-          <p className="text-5xl font-bold text-blue-600">{partyOptions.length}</p>
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="stat-card stat-card-blue">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Total Parties</h3>
+              <p className="text-2xl font-semibold text-gray-900">
+                {partyOptions.length}
+              </p>
+            </div>
+            <div className="p-2 bg-blue-100 rounded-md">
+              <Users size={20} className="text-blue-600" />
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Active business partners
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow-md p-8 flex flex-col items-center">
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">Total Factories</h3>
-          <p className="text-5xl font-bold text-green-600">{factoryOptions.length}</p>
+
+        <div className="stat-card stat-card-green">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Total Factories</h3>
+              <p className="text-2xl font-semibold text-gray-900">
+                {factoryOptions.length}
+              </p>
+            </div>
+            <div className="p-2 bg-green-100 rounded-md">
+              <Factory size={20} className="text-green-600" />
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Manufacturing units
+          </div>
+        </div>
+
+        <div className="stat-card stat-card-purple">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Active Transactions</h3>
+              <p className="text-2xl font-semibold text-gray-900">
+                {(partyData?.transactions?.length || 0) + (factoryData?.transactions?.length || 0)}
+              </p>
+            </div>
+            <div className="p-2 bg-purple-100 rounded-md">
+              <FileText size={20} className="text-purple-600" />
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Recent activities
+          </div>
+        </div>
+
+        <div className="stat-card stat-card-orange">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">Total Value</h3>
+              <p className="text-2xl font-semibold text-gray-900">
+                ₹{((partyData?.totalAmount || 0) + (factoryData?.totalAmount || 0)).toLocaleString()}
+              </p>
+            </div>
+            <div className="p-2 bg-orange-100 rounded-md">
+              <BarChart3 size={20} className="text-orange-600" />
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Business volume
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-        <div>
-          <label htmlFor="partySelect" className="block text-lg font-medium text-gray-700 mb-2">
-            Select Party
-          </label>
-          <select
-            id="partySelect"
-            value={partyId}
-            onChange={(e) => setPartyId(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white py-3 px-4 shadow-sm placeholder-gray-400 focus:border-green-400 focus:ring-2 focus:ring-green-300 focus:outline-none transition"
-          >
-            <option value="">-- Select Party --</option>
-            {partyOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+      <div className="space-y-6">
+        {/* Selection Controls */}
+        <div className="card">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Select Party or Factory
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="partySelect" className="block text-sm font-medium text-gray-700 mb-2">
+                Select Party
+              </label>
+              <select
+                id="partySelect"
+                value={partyId}
+                onChange={(e) => setPartyId(e.target.value)}
+                className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">-- Select Party --</option>
+                {partyOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="factorySelect" className="block text-sm font-medium text-gray-700 mb-2">
+                Select Factory
+              </label>
+              <select
+                id="factorySelect"
+                value={factoryId}
+                onChange={(e) => setFactoryId(e.target.value)}
+                className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">-- Select Factory --</option>
+                {factoryOptions.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
-        <div>
-          <label htmlFor="factorySelect" className="block text-lg font-medium text-gray-700 mb-2">
-            Select Factory
-          </label>
-          <select
-            id="factorySelect"
-            value={factoryId}
-            onChange={(e) => setFactoryId(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white py-3 px-4 shadow-sm placeholder-gray-400 focus:border-green-400 focus:ring-2 focus:ring-green-300 focus:outline-none transition"
-          >
-            <option value="">-- Select Factory --</option>
-            {factoryOptions.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <HisabTally filters={{ partyId, factoryId }} />
       </div>
-
-      <HisabTally filters={{ partyId, factoryId }} />
-
-      {partyData && (
-        <section className="bg-white p-6 rounded-xl shadow-md space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-2xl font-semibold text-gray-800">Party Summary</h3>
-            <div className="flex gap-3">
-              <button
-                onClick={() => exportSummaryAsPDF('party')}
-                className="rounded-md bg-blue-600 px-4 py-2 text-white font-semibold shadow hover:bg-blue-700 transition"
-              >
-                Export PDF
-              </button>
-              <button
-                onClick={() => exportSummaryAsExcel('party')}
-                className="rounded-md bg-green-600 px-4 py-2 text-white font-semibold shadow hover:bg-green-700 transition"
-              >
-                Export Excel
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-8 text-gray-700">
-            <div>
-              <p className="text-sm font-medium">Total Amount</p>
-              <p className="text-xl font-bold text-blue-700">₹ {partyData.totalAmount}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Total Paid</p>
-              <p className="text-xl font-bold text-blue-700">₹ {partyData.totalPaid}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Remaining</p>
-              <p className="text-xl font-bold text-red-600">₹ {partyData.remaining}</p>
-            </div>
-          </div>
-          <TransactionTable transactions={partyData.transactions} />
-        </section>
-      )}
-
-      {factoryData && (
-        <section className="bg-white p-6 rounded-xl shadow-md space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-2xl font-semibold text-gray-800">Factory Summary</h3>
-            <div className="flex gap-3">
-              <button
-                onClick={() => exportSummaryAsPDF('factory')}
-                className="rounded-md bg-blue-600 px-4 py-2 text-white font-semibold shadow hover:bg-blue-700 transition"
-              >
-                Export PDF
-              </button>
-              <button
-                onClick={() => exportSummaryAsExcel('factory')}
-                className="rounded-md bg-green-600 px-4 py-2 text-white font-semibold shadow hover:bg-green-700 transition"
-              >
-                Export Excel
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-8 text-gray-700">
-            <div>
-              <p className="text-sm font-medium">Total Amount</p>
-              <p className="text-xl font-bold text-green-700">₹ {factoryData.totalAmount}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Total Received</p>
-              <p className="text-xl font-bold text-green-700">₹ {factoryData.totalReceived}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Remaining</p>
-              <p className="text-xl font-bold text-red-600">₹ {factoryData.remaining}</p>
-            </div>
-          </div>
-          <TransactionTable transactions={factoryData.transactions} />
-        </section>
-      )}
     </div>
   );
 };

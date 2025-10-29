@@ -6,6 +6,7 @@ class TransactionController {
   static async createTransaction(req, res) {
     try {
       const data = req.body;
+      const { transactionType, copyToParty } = data;
   
       const calculateAmount = (d) => {
         const base = parseFloat(d.weight || 0) * parseFloat(d.rate || 0);
@@ -34,28 +35,44 @@ class TransactionController {
   
       let result;
   
-      if (data.party_id) {
-        // 1. Create Party Transaction
-        result = await TransactionRepo.createPartyTransaction(data);
-  
-        // 2. Create Corresponding Factory Transaction
-        const factoryTxData = {
-          factory_id: data.factory_id,
-          factory_name: data.factory_name,
-          party_name: data.party_name,
-          date: data.date,
-          vehicle_no: data.vehicle_no,
-          weight: data.weight,
-          rate: parseFloat(data.rate) + 0.2,
-          total_amount: parseFloat(data.weight) * (parseFloat(data.rate) + 0.2),
-          remarks: data.remarks
-        };
-        await TransactionRepo.createFactoryTransaction(factoryTxData);
-      } else if (data.factory_id) {
-        // Create Factory Transaction independently (if sent directly)
+      if (transactionType === "factory") {
+        // Create Factory Transaction only
+        if (!data.factory_id) {
+          return res.status(400).json({ message: "factory_id is required for factory transactions" });
+        }
         result = await TransactionRepo.createFactoryTransaction(data);
+        
+      } else if (transactionType === "party") {
+        // Create Party Transaction
+        if (!data.party_id) {
+          return res.status(400).json({ message: "party_id is required for party transactions" });
+        }
+        result = await TransactionRepo.createPartyTransaction(data);
+        
+        // If copyToParty is true, also create corresponding factory transaction
+        if (copyToParty && data.factory_id) {
+          const factoryTxData = {
+            factory_id: data.factory_id,
+            factory_name: data.factory_name,
+            party_id: data.party_id,
+            party_name: data.party_name,
+            date: data.date,
+            vehicle_no: data.vehicle_no,
+            weight: data.weight,
+            rate: data.rate,
+            moisture: data.moisture,
+            rejection: data.rejection,
+            duplex: data.duplex,
+            first: data.first,
+            second: data.second,
+            third: data.third,
+            total_amount: data.total_amount,
+            remarks: data.remarks
+          };
+          await TransactionRepo.createFactoryTransaction(factoryTxData);
+        }
       } else {
-        return res.status(400).json({ message: "Missing party_id or factory_id" });
+        return res.status(400).json({ message: "Invalid transaction type. Must be 'factory' or 'party'" });
       }
   
       res.status(201).json(result);
@@ -91,6 +108,18 @@ class TransactionController {
     }
   }
 
+  static async getHisab(req, res) {
+    try {
+      const { partyId, factoryId, startDate, endDate } = req.query;
+      const data = await TransactionRepo.getHisab({ partyId, factoryId, startDate, endDate });
+      res.json(data);
+    } catch (err) {
+      console.error("Error in getHisab:", err);
+      res.status(500).json({ message: "Failed to fetch hisab data" });
+    }
+  }
+  
+
   static async getTransactionsByFactory(req, res) {
     try {
       const transactions = await TransactionRepo.getFactoryTransactions(req.params.factory_id);
@@ -102,16 +131,21 @@ class TransactionController {
 
   static async getSummaryParty(req, res) {
     try {
-      const summary = await TransactionRepo.getSummaryByParty(req.params.party_id);
+      const { startDate, endDate } = req.query;
+      console.log('Getting party summary for party_id:', req.params.party_id, 'startDate:', startDate, 'endDate:', endDate);
+      const summary = await TransactionRepo.getSummaryByParty(req.params.party_id, startDate, endDate);
+      console.log('Summary result:', summary);
       res.json(summary);
     } catch (error) {
-      res.status(500).json({ message: 'Failed to fetch party summary' });
+      console.error('Error in getSummaryParty:', error);
+      res.status(500).json({ message: 'Failed to fetch party summary', error: error.message });
     }
   }
 
   static async getSummaryFactory(req, res) {
     try {
-      const summary = await TransactionRepo.getSummaryByFactory(req.params.factory_id);
+      const { startDate, endDate } = req.query;
+      const summary = await TransactionRepo.getSummaryByFactory(req.params.factory_id, startDate, endDate);
       res.json(summary);
     } catch (error) {
       res.status(500).json({ message: 'Failed to fetch factory summary' });
