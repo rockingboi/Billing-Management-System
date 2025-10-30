@@ -1,6 +1,29 @@
-## System Billing – Quick Start
+## System Billing – Overview
 
-A full-stack billing management system.
+System Billing is a full‑stack billing and ledger management system tailored for small businesses dealing with parties (customers/suppliers) and factories. It helps you record transactions (weight, rate, vehicle, moisture, etc.), track payments received/paid, and view summarized balances (Hisab) for any party or factory over a date range.
+
+### Why this project?
+- Keep sales/purchase transactions and money flow organized in one place
+- Automatically compute totals and remaining amounts for parties and factories
+- Filter history by date, party, and factory to reconcile accounts quickly
+- Simple UI to add entries fast; clean API to integrate later if needed
+
+### Key Features
+- Parties and Factories management (name, contact, address, GSTIN)
+- Transaction recording with detailed fields: date, vehicle no, weight, rate, moisture, rejection, duplex, first/second/third, remarks
+- Payments: party payments and factory payments with remaining balance tracking
+- Hisab/Tally summary by party/factory and date range
+- REST API (Express) + React frontend
+
+### Tech Stack
+- Backend: Node.js, Express, MySQL (`mysql2`)
+- Frontend: React
+- Styling: Tailwind CSS
+- Env & tooling: dotenv, nodemon
+
+---
+
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+
